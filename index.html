@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Raffle Entry</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <main class="card">
+    <header class="header">
+      <h1 id="prizeTitle">Win the Prize!</h1>
+      <p id="prizeSubtitle" class="subtitle">$1 = 1 entry. The more entries, the better your odds.</p>
+    </header>
+
+    <form id="entryForm" novalidate>
+      <div class="field">
+        <label for="name">Full name</label>
+        <input type="text" id="name" name="name" autocomplete="name" required />
+        <span class="error" id="nameError"></span>
+      </div>
+
+      <div class="field">
+        <label for="phone">Cellphone number</label>
+        <input type="tel" id="phone" name="phone" autocomplete="tel" inputmode="tel" required />
+        <span class="error" id="phoneError"></span>
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="email" required />
+        <span class="error" id="emailError"></span>
+      </div>
+
+      <div class="field">
+        <label>Amount to spend</label>
+        <div class="preset-amounts" id="presetAmounts"></div>
+        <div class="custom-amount">
+          <span class="dollar-sign">$</span>
+          <input type="number" id="customAmount" name="amount" min="1" step="1" placeholder="Custom amount" />
+        </div>
+        <span class="error" id="amountError"></span>
+      </div>
+
+      <div class="summary" id="summary" hidden>
+        <span id="summaryText"></span>
+      </div>
+
+      <button type="submit" id="submitBtn">Get My Entries</button>
+      <p class="status" id="statusMsg" role="status" aria-live="polite"></p>
+    </form>
+
+    <section id="confirmation" class="confirmation" hidden>
+      <h2>You're almost in! 🎉</h2>
+      <p id="confirmationText"></p>
+      <p class="reference">Reference ID: <code id="entryIdText"></code></p>
+      <a id="paymentLink" class="payment-btn" href="#" hidden>Continue to Payment</a>
+      <p id="paymentPendingNote" class="hint"></p>
+    </section>
+  </main>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
