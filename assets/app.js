@@ -9,7 +9,7 @@ const CONFIG = {
 
   // Paste the "Web app" URL you get after deploying apps-script/Code.gs
   // (Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone).
-  appsScriptUrl: "https://script.google.com/macros/library/d/1qr341Vhib_zFw3mhSxzN7Vv-yj6tN0scnPHBMVIx3sT1uPXOlohf33mN/1",
+  appsScriptUrl: "https://script.google.com/macros/s/AKfycbwvj_SsZ71dkUtn9L-YECk11rihsiRvKxeERw7Nd1e1jocHFAnPnn33YrQ-4hvPEP1c/exec", // must end in /exec — see README step 1
 
   // Optional: once your payment tool is ready, set this to the URL it needs
   // (or leave blank to just show a "we'll be in touch" message for now).
