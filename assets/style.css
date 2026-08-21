@@ -67,20 +67,68 @@ body {
   text-align: center;
 }
 
-.prize-image {
-  display: block;
-  width: 100%;
-  max-height: 280px;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(35, 31, 30, 0.12);
-}
-
-.prize-showcase figcaption {
-  margin-top: 8px;
+.prize-caption {
+  margin: 0 0 10px;
   font-size: 0.8rem;
   color: var(--muted);
   font-weight: 600;
+}
+
+.prize-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.prize-image {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.prize-image--products {
+  box-shadow: 0 8px 20px rgba(35, 31, 30, 0.12);
+}
+
+.prize-image--ceremony {
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 20px rgba(35, 31, 30, 0.15);
+}
+
+.prize-list-title {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-align: left;
+}
+
+.prize-list {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  background: #f6f1ea;
+  border: 1px solid #e4d8c6;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.prize-list li {
+  position: relative;
+  padding: 3px 0 3px 22px;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.prize-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .field {
