@@ -11,10 +11,10 @@ const CONFIG = {
   // (Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone).
   appsScriptUrl: "https://script.google.com/macros/s/AKfycbwvj_SsZ71dkUtn9L-YECk11rihsiRvKxeERw7Nd1e1jocHFAnPnn33YrQ-4hvPEP1c/exec", // must end in /exec — see README step 1
 
-  // Optional: once your payment tool is ready, set this to the URL it needs
-  // (or leave blank to just show a "we'll be in touch" message for now).
-  // {entryId}, {amount}, {name}, {email} placeholders are replaced automatically.
-  paymentUrl: "",
+  // ATH Móvil Business "Public Token" (Settings tab in the ATH Business app).
+  // This value is meant to be public/client-side — ATH Móvil's own Payment
+  // Button widget requires it to be embedded in the page like this.
+  athPublicToken: "680b201c4ca668db83c06825b7e7e44cc75ae421",
 };
 // ---------------------------------------------------------------------------
 
@@ -28,13 +28,36 @@ const summaryEl = document.getElementById("summary");
 const summaryText = document.getElementById("summaryText");
 const submitBtn = document.getElementById("submitBtn");
 const statusMsg = document.getElementById("statusMsg");
+const payStepEl = document.getElementById("payStep");
+const paySummaryText = document.getElementById("paySummaryText");
+const payStatusMsg = document.getElementById("payStatusMsg");
+const backToFormBtn = document.getElementById("backToFormBtn");
 const confirmationEl = document.getElementById("confirmation");
 const confirmationText = document.getElementById("confirmationText");
 const entryIdText = document.getElementById("entryIdText");
-const paymentLink = document.getElementById("paymentLink");
-const paymentPendingNote = document.getElementById("paymentPendingNote");
 
 let selectedAmount = null;
+let pendingEntry = null; // { entryId, name, phone, email, amount, entries } set once the user reaches the pay step
+
+// Config object read by ATH Móvil's athmovil_base.js widget. It renders its
+// own "Pay with ATH Móvil" button into #ATHMovil_Checkout_Button_payment and
+// reads these fields at the moment the customer taps that button, so it's
+// safe to mutate them right before revealing the pay step.
+const ATHM_Checkout = {
+  env: "production",
+  publicToken: CONFIG.athPublicToken,
+  timeout: 600,
+  orderType: "",
+  theme: "btn",
+  lang: "en",
+  total: 1,
+  subtotal: 1,
+  tax: 0,
+  metadata1: "",
+  metadata2: "",
+  items: [],
+  phoneNumber: "",
+};
 
 function init() {
   document.getElementById("prizeTitle").textContent = CONFIG.prizeTitle;
@@ -150,31 +173,65 @@ async function submitEntry(payload) {
   return data;
 }
 
-function fillTemplate(template, values) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => encodeURIComponent(values[key] ?? ""));
+function setPayStatus(message, kind) {
+  payStatusMsg.textContent = message || "";
+  payStatusMsg.classList.remove("error-text", "success-text");
+  if (kind === "error") payStatusMsg.classList.add("error-text");
+  if (kind === "success") payStatusMsg.classList.add("success-text");
 }
 
-function showConfirmation(payload) {
-  form.hidden = true;
+function showConfirmation(entries, amount, entryId) {
+  payStepEl.hidden = true;
   confirmationEl.hidden = false;
 
-  const entries = payload.entries;
-  confirmationText.textContent = `We've saved your request for ${entries} ${
-    entries === 1 ? "entry" : "entries"
-  } ($${payload.amount}). Complete payment to lock them in.`;
-  entryIdText.textContent = payload.entryId;
-
-  if (CONFIG.paymentUrl) {
-    paymentLink.href = fillTemplate(CONFIG.paymentUrl, payload);
-    paymentLink.hidden = false;
-    paymentPendingNote.textContent = "";
-  } else {
-    paymentPendingNote.textContent =
-      "Payment step is being set up. We'll reach out with instructions to complete your purchase.";
-  }
+  confirmationText.textContent = `Your payment went through and your ${entries} ${
+    entries === 1 ? "entry is" : "entries are"
+  } locked in ($${amount}). Good luck!`;
+  entryIdText.textContent = entryId;
 }
 
-form.addEventListener("submit", async (event) => {
+function goToPayStep() {
+  const entries = Math.floor(selectedAmount / CONFIG.pricePerEntry);
+  pendingEntry = {
+    entryId: crypto.randomUUID(),
+    name: nameInput.value.trim(),
+    phone: phoneInput.value.trim(),
+    email: emailInput.value.trim(),
+    amount: selectedAmount,
+    entries,
+  };
+
+  ATHM_Checkout.total = selectedAmount;
+  ATHM_Checkout.subtotal = selectedAmount;
+  ATHM_Checkout.tax = 0;
+  ATHM_Checkout.metadata1 = pendingEntry.entryId;
+  ATHM_Checkout.metadata2 = pendingEntry.name.slice(0, 40);
+  ATHM_Checkout.phoneNumber = pendingEntry.phone;
+  ATHM_Checkout.items = [
+    {
+      name: `${entries} ${entries === 1 ? "Raffle Entry" : "Raffle Entries"}`,
+      description: CONFIG.prizeTitle,
+      quantity: 1,
+      price: selectedAmount,
+      tax: 0,
+      metadata: pendingEntry.entryId,
+    },
+  ];
+
+  paySummaryText.textContent = `$${selectedAmount} = ${entries} ${entries === 1 ? "entry" : "entries"}`;
+  setPayStatus("", null);
+  form.hidden = true;
+  payStepEl.hidden = false;
+}
+
+backToFormBtn.addEventListener("click", () => {
+  pendingEntry = null;
+  payStepEl.hidden = true;
+  form.hidden = false;
+  submitBtn.disabled = false;
+});
+
+form.addEventListener("submit", (event) => {
   event.preventDefault();
   setStatus("", null);
 
@@ -188,27 +245,87 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  const entries = Math.floor(selectedAmount / CONFIG.pricePerEntry);
-  const payload = {
-    entryId: crypto.randomUUID(),
-    name: nameInput.value.trim(),
-    phone: phoneInput.value.trim(),
-    email: emailInput.value.trim(),
-    amount: selectedAmount,
-    entries,
-  };
+  if (!CONFIG.athPublicToken) {
+    setStatus("Setup incomplete: athPublicToken is not configured in assets/app.js.", "error");
+    return;
+  }
 
-  submitBtn.disabled = true;
-  setStatus("Submitting…", null);
+  goToPayStep();
+});
+
+// ---------------------------------------------------------------------------
+// ATH Móvil Payment Button callbacks. athmovil_base.js calls these by name
+// once the customer confirms (or cancels/times out) the payment in the ATH
+// Móvil app, and provides the `authorization()` / `findPaymentATHM()` helper
+// functions used below. See:
+// https://github.com/evertec/athmovil-javascript-api
+// ---------------------------------------------------------------------------
+
+async function authorizationATHM() {
+  setPayStatus("Confirming your payment…", null);
+  try {
+    const response = await authorization();
+    const data = response && response.data;
+    if (data && data.ecommerceStatus === "COMPLETED") {
+      await finalizeEntry(data);
+    } else {
+      handlePaymentNotCompleted();
+    }
+  } catch (err) {
+    console.error(err);
+    handlePaymentNotCompleted();
+  }
+}
+
+async function cancelATHM() {
+  try {
+    await findPaymentATHM();
+  } catch (err) {
+    console.error(err);
+  }
+  handlePaymentNotCompleted("Payment was cancelled.");
+}
+
+async function expiredATHM() {
+  try {
+    await findPaymentATHM();
+  } catch (err) {
+    console.error(err);
+  }
+  handlePaymentNotCompleted("The payment window expired.");
+}
+
+function handlePaymentNotCompleted(reason) {
+  const message = reason || "Payment wasn't completed.";
+  setPayStatus(`${message} Your entry was not saved — please try again.`, "error");
+}
+
+async function finalizeEntry(athData) {
+  if (!pendingEntry) return;
+
+  const payload = {
+    entryId: pendingEntry.entryId,
+    name: pendingEntry.name,
+    phone: pendingEntry.phone,
+    email: pendingEntry.email,
+    amount: athData.total,
+    entries: pendingEntry.entries,
+    referenceNumber: athData.referenceNumber || "",
+    paymentStatus: "paid",
+  };
 
   try {
     await submitEntry(payload);
-    showConfirmation(payload);
+    pendingEntry = null;
+    showConfirmation(payload.entries, payload.amount, payload.entryId);
   } catch (err) {
     console.error(err);
-    setStatus("Something went wrong saving your entry. Please try again.", "error");
-    submitBtn.disabled = false;
+    setPayStatus(
+      "Payment succeeded but we couldn't save your entry. Please contact us with reference " +
+        `${athData.referenceNumber || "N/A"}.`,
+      "error"
+    );
   }
-});
+}
 
 init();

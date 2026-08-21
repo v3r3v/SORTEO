@@ -2,14 +2,16 @@
 
 A static, no-server raffle entry form. People scan a QR code, land on the page,
 enter their Name / Cellphone / Email, pick a dollar amount (each $1 = 1 entry),
-and their entry is recorded in a Google Sheet. When you're ready to draw,
-a one-click menu picks a random winner, weighted by number of entries.
+pay with ATH Móvil, and — only once that payment is confirmed — their entry is
+recorded in a Google Sheet. When you're ready to draw, a one-click menu picks a
+random winner, weighted by number of entries.
 
-Everything here is free and requires no paid subscription:
+Everything here is free and requires no paid subscription (aside from ATH
+Móvil's own transaction fee):
 
 - **Frontend**: plain HTML/CSS/JS ([index.html](index.html), [assets/](assets/)) — hosted for free on GitHub Pages.
 - **Data storage**: a Google Sheet, written to by a free Google Apps Script "Web App" ([apps-script/Code.gs](apps-script/Code.gs)).
-- **Payment**: not wired up yet on purpose — see "Payment integration" below.
+- **Payment**: [ATH Móvil's Payment Button widget](https://github.com/evertec/athmovil-javascript-api) — see "Payment integration" below.
 
 ## 1. Create the Google Sheet backend
 
@@ -38,7 +40,7 @@ const CONFIG = {
   pricePerEntry: 1,
   presetAmounts: [1, 5, 10, 20, 50],
   appsScriptUrl: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE", // <- paste the URL from step 1.5
-  paymentUrl: "",
+  athPublicToken: "YOUR_ATH_BUSINESS_PUBLIC_TOKEN", // <- see "Payment integration" below
 };
 ```
 
@@ -59,16 +61,23 @@ Once you have the live URL from step 3, use any free QR code generator (e.g. sea
 
 ## 5. Collecting entries & picking a winner
 
-- Every submission adds a row to the **Entries** tab: Timestamp, EntryID, Name, Phone, Email, AmountUSD, Entries, PaymentStatus.
-- New rows start with `PaymentStatus = pending`.
-- Once you've confirmed payment for a person (through whatever payment tool you end up using), change their row's `PaymentStatus` to `paid` directly in the sheet.
-- When you're ready to draw: open the Google Sheet, click **Raffle > Pick Random Winner** in the menu. It randomly selects a winner weighted by entry count — only counting rows marked `paid` — and shows the result in a popup.
+- A row is added to the **Entries** tab (Timestamp, EntryID, Name, Phone, Email, AmountUSD, Entries, PaymentStatus, ReferenceNumber) **only after ATH Móvil confirms the payment as `COMPLETED`.** If the customer declines, cancels, has no funds, or the payment window expires, nothing is written and the page shows an error instead.
+- Every row that does exist is therefore already `PaymentStatus = paid` — there's nothing to mark manually.
+- `ReferenceNumber` is ATH Móvil's own transaction ID, handy for reconciling against your ATH Business transaction history if needed.
+- When you're ready to draw: open the Google Sheet, click **Raffle > Pick Random Winner** in the menu. It randomly selects a winner weighted by entry count and shows the result in a popup.
 
-## Payment integration (not yet wired up)
+## Payment integration (ATH Móvil)
 
-You mentioned the payment piece is being handled separately. The form already has a hook for it: once a person submits their info, `assets/app.js` shows a confirmation screen and, if you set `CONFIG.paymentUrl`, a "Continue to Payment" button linking there with `{entryId}`, `{name}`, `{email}`, `{amount}` placeholders auto-filled in. Until `paymentUrl` is set, it just shows a "we'll be in touch" message. Each entry also gets a random `EntryID` (shown to the user and stored in the sheet) so you can reconcile a payment back to the right row later.
+Payment is handled by [ATH Móvil's Payment Button widget](https://github.com/evertec/athmovil-javascript-api), embedded directly in [index.html](index.html) / [assets/app.js](assets/app.js). Flow:
 
-When your payment tool is ready, the two integration points are:
+1. The customer fills in their details and picks an amount, then clicks **Get My Entries**. This just validates the form — nothing is saved yet.
+2. The page reveals ATH Móvil's own "Pay with ATH Móvil" button. Tapping it creates the transaction and opens ATH's payment modal; the customer confirms in the ATH Móvil app on their phone.
+3. ATH Móvil calls back into the page (`authorizationATHM`, `cancelATHM`, `expiredATHM` in `assets/app.js`) once the customer confirms, cancels, or the payment times out.
+4. Only on a `COMPLETED` result does the page call the Apps Script endpoint to save the entry — with `PaymentStatus = paid` and ATH's `ReferenceNumber` — and show the confirmation screen. Any other outcome shows an error and nothing is saved.
 
-1. Set `CONFIG.paymentUrl` in [assets/app.js](assets/app.js) to send users onward after they submit the form, and/or
-2. Have the payment tool (or you, manually) update the matching row's `PaymentStatus` to `paid` in the sheet once payment clears.
+**Setup:** set `CONFIG.athPublicToken` in [assets/app.js](assets/app.js) to your ATH Business account's **Public Token** (Settings tab in the ATH Business app). This token is meant to be public/client-side — that's how ATH Móvil's own widget is designed to be embedded. Never put your ATH Business **private** token anywhere in this repo or the frontend; it isn't needed for this flow at all.
+
+Two things to know going in, straight from ATH Móvil's own docs:
+
+- **There is no sandbox/testing environment.** Testing requires a real, active ATH Business account and a separate real ATH Móvil account (different card) to pay from — e.g. do a real $1 test run before going live.
+- **There's no webhook.** Confirmation happens client-side via the callback functions above while the page is open; there's no server-side notification if the customer closes the tab mid-payment (they just won't get an entry, which is the safe failure mode).

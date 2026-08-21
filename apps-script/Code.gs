@@ -12,8 +12,11 @@
  */
 
 const SHEET_NAME = "Entries";
-const HEADERS = ["Timestamp", "EntryID", "Name", "Phone", "Email", "AmountUSD", "Entries", "PaymentStatus"];
+const HEADERS = ["Timestamp", "EntryID", "Name", "Phone", "Email", "AmountUSD", "Entries", "PaymentStatus", "ReferenceNumber"];
 
+// Entries only reach here once ATH Móvil has confirmed the payment as
+// COMPLETED (see assets/app.js finalizeEntry) — declined/cancelled/expired
+// payments never call this endpoint, so nothing gets written for them.
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
@@ -27,7 +30,8 @@ function doPost(e) {
       data.email || "",
       Number(data.amount) || 0,
       Number(data.entries) || 0,
-      "pending", // marked "paid" manually (or by future payment integration) before the draw
+      data.paymentStatus || "paid",
+      data.referenceNumber || "",
     ]);
 
     return jsonResponse({ result: "success" });
@@ -60,8 +64,8 @@ function onOpen() {
 
 /**
  * Picks a winner weighted by number of entries, counting only rows whose
- * PaymentStatus column is exactly "paid". Mark rows "paid" once payment is
- * confirmed (manually for now, or automatically once the payment tool is wired up).
+ * PaymentStatus column is exactly "paid" (every row written by doPost already
+ * is, since it only runs after ATH Móvil confirms payment).
  */
 function pickWinner() {
   const ui = SpreadsheetApp.getUi();

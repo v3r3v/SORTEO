@@ -223,3 +223,29 @@ button[type="submit"]:disabled {
   font-size: 0.82rem;
   margin-top: 14px;
 }
+
+.pay-step {
+  text-align: center;
+}
+
+.pay-step .summary {
+  margin-bottom: 4px;
+}
+
+#ATHMovil_Checkout_Button_payment {
+  margin: 18px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.link-btn {
+  display: block;
+  margin: 8px auto 0;
+  padding: 6px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}

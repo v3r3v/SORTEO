@@ -50,15 +50,22 @@
       <p class="status" id="statusMsg" role="status" aria-live="polite"></p>
     </form>
 
+    <section id="payStep" class="pay-step" hidden>
+      <p class="summary" id="paySummaryText"></p>
+      <p class="hint">Tap below and confirm the payment in your ATH Móvil app.</p>
+      <div id="ATHMovil_Checkout_Button_payment"></div>
+      <button type="button" id="backToFormBtn" class="link-btn">← Edit my details</button>
+      <p class="status" id="payStatusMsg" role="status" aria-live="polite"></p>
+    </section>
+
     <section id="confirmation" class="confirmation" hidden>
-      <h2>You're almost in! 🎉</h2>
+      <h2>You're in! 🎉</h2>
       <p id="confirmationText"></p>
       <p class="reference">Reference ID: <code id="entryIdText"></code></p>
-      <a id="paymentLink" class="payment-btn" href="#" hidden>Continue to Payment</a>
-      <p id="paymentPendingNote" class="hint"></p>
     </section>
   </main>
 
+  <script src="https://payments.athmovil.com/api/modal/js/athmovil_base.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
