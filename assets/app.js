@@ -3,9 +3,7 @@
 // ---------------------------------------------------------------------------
 const CONFIG = {
   prizeTitle: "Win the Prize! 🏆",
-  prizeSubtitle: "$1 = 1 entry. The more entries, the better your odds.",
-  pricePerEntry: 1, // dollars per entry
-  presetAmounts: [1, 5, 10, 20, 50],
+  prizeSubtitle: "$5 = 1 entry. Up to 3 entries per payment.",
 
   // Paste the "Web app" URL you get after deploying apps-script/Code.gs
   // (Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone).
@@ -15,6 +13,18 @@ const CONFIG = {
   // This value is meant to be public/client-side — ATH Móvil's own Payment
   // Button widget requires it to be embedded in the page like this.
   athPublicToken: "680b201c4ca668db83c06825b7e7e44cc75ae421",
+
+  // Fixed entry options — $5 per entry, capped at 3 entries per payment.
+  entryTiers: [
+    { entries: 1, amount: 5 },
+    { entries: 2, amount: 10 },
+    { entries: 3, amount: 15 },
+  ],
+
+  // TEMPORARY, for testing the real ATH Móvil payment flow cheaply (there's
+  // no sandbox environment, so testing costs real money). Remove this whole
+  // property (or set it to null) once testing is done, before going live.
+  testTier: { entries: 1, amount: 0.01 },
 };
 // ---------------------------------------------------------------------------
 
@@ -22,7 +32,6 @@ const form = document.getElementById("entryForm");
 const nameInput = document.getElementById("name");
 const phoneInput = document.getElementById("phone");
 const emailInput = document.getElementById("email");
-const customAmountInput = document.getElementById("customAmount");
 const presetAmountsEl = document.getElementById("presetAmounts");
 const summaryEl = document.getElementById("summary");
 const summaryText = document.getElementById("summaryText");
@@ -36,7 +45,7 @@ const confirmationEl = document.getElementById("confirmation");
 const confirmationText = document.getElementById("confirmationText");
 const entryIdText = document.getElementById("entryIdText");
 
-let selectedAmount = null;
+let selectedTier = null; // { entries, amount } from CONFIG.entryTiers / CONFIG.testTier
 let pendingEntry = null; // { entryId, name, phone, email, amount, entries } set once the user reaches the pay step
 
 // Config object read by ATH Móvil's athmovil_base.js widget. It renders its
@@ -63,28 +72,24 @@ function init() {
   document.getElementById("prizeTitle").textContent = CONFIG.prizeTitle;
   document.getElementById("prizeSubtitle").textContent = CONFIG.prizeSubtitle;
 
-  CONFIG.presetAmounts.forEach((amount) => {
+  const tiers = CONFIG.testTier ? [CONFIG.testTier, ...CONFIG.entryTiers] : CONFIG.entryTiers;
+  tiers.forEach((tier) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "amount-btn";
-    btn.textContent = `$${amount}`;
-    btn.addEventListener("click", () => selectAmount(amount, btn));
+    if (tier === CONFIG.testTier) btn.classList.add("amount-btn--test");
+    btn.innerHTML = `$${tier.amount}<small>${tier.entries} ${tier.entries === 1 ? "entry" : "entries"}${
+      tier === CONFIG.testTier ? " · test" : ""
+    }</small>`;
+    btn.addEventListener("click", () => selectTier(tier, btn));
     presetAmountsEl.appendChild(btn);
-  });
-
-  customAmountInput.addEventListener("input", () => {
-    clearPresetSelection();
-    const value = Number(customAmountInput.value);
-    selectedAmount = value > 0 ? value : null;
-    updateSummary();
   });
 }
 
-function selectAmount(amount, btnEl) {
-  customAmountInput.value = "";
+function selectTier(tier, btnEl) {
   clearPresetSelection();
   btnEl.classList.add("selected");
-  selectedAmount = amount;
+  selectedTier = tier;
   updateSummary();
 }
 
@@ -96,12 +101,13 @@ function updateSummary() {
   const amountError = document.getElementById("amountError");
   amountError.textContent = "";
 
-  if (!selectedAmount || selectedAmount < CONFIG.pricePerEntry) {
+  if (!selectedTier) {
     summaryEl.hidden = true;
     return;
   }
-  const entries = Math.floor(selectedAmount / CONFIG.pricePerEntry);
-  summaryText.textContent = `$${selectedAmount} = ${entries} ${entries === 1 ? "entry" : "entries"}`;
+  summaryText.textContent = `$${selectedTier.amount} = ${selectedTier.entries} ${
+    selectedTier.entries === 1 ? "entry" : "entries"
+  }`;
   summaryEl.hidden = false;
 }
 
@@ -135,8 +141,8 @@ function validate() {
     setFieldError("emailError", "");
   }
 
-  if (!selectedAmount || selectedAmount < CONFIG.pricePerEntry) {
-    setFieldError("amountError", `Choose or enter at least $${CONFIG.pricePerEntry}.`);
+  if (!selectedTier) {
+    setFieldError("amountError", "Choose how many entries you'd like.");
     valid = false;
   } else {
     setFieldError("amountError", "");
@@ -191,34 +197,38 @@ function showConfirmation(entries, amount, entryId) {
 }
 
 function goToPayStep() {
-  const entries = Math.floor(selectedAmount / CONFIG.pricePerEntry);
+  const { entries, amount } = selectedTier;
   pendingEntry = {
     entryId: crypto.randomUUID(),
     name: nameInput.value.trim(),
     phone: phoneInput.value.trim(),
     email: emailInput.value.trim(),
-    amount: selectedAmount,
+    amount,
     entries,
   };
 
-  ATHM_Checkout.total = selectedAmount;
-  ATHM_Checkout.subtotal = selectedAmount;
+  // ATH Móvil's example config uses a plain 10-digit local number (no
+  // formatting, no country code) to pre-fill the phone screen in their modal.
+  const athPhoneDigits = pendingEntry.phone.replace(/\D/g, "").slice(-10);
+
+  ATHM_Checkout.total = amount;
+  ATHM_Checkout.subtotal = amount;
   ATHM_Checkout.tax = 0;
   ATHM_Checkout.metadata1 = pendingEntry.entryId;
   ATHM_Checkout.metadata2 = pendingEntry.name.slice(0, 40);
-  ATHM_Checkout.phoneNumber = pendingEntry.phone;
+  ATHM_Checkout.phoneNumber = athPhoneDigits;
   ATHM_Checkout.items = [
     {
       name: `${entries} ${entries === 1 ? "Raffle Entry" : "Raffle Entries"}`,
       description: CONFIG.prizeTitle,
       quantity: 1,
-      price: selectedAmount,
+      price: amount,
       tax: 0,
       metadata: pendingEntry.entryId,
     },
   ];
 
-  paySummaryText.textContent = `$${selectedAmount} = ${entries} ${entries === 1 ? "entry" : "entries"}`;
+  paySummaryText.textContent = `$${amount} = ${entries} ${entries === 1 ? "entry" : "entries"}`;
   setPayStatus("", null);
   form.hidden = true;
   payStepEl.hidden = false;

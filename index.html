@@ -9,9 +9,15 @@
 <body>
   <main class="card">
     <header class="header">
+      <img class="company-logo" src="public/company_logo.png" alt="Blow by Alfredo Hernández — Hair &amp; Beauty Salon" />
       <h1 id="prizeTitle">Win the Prize!</h1>
-      <p id="prizeSubtitle" class="subtitle">$1 = 1 entry. The more entries, the better your odds.</p>
+      <p id="prizeSubtitle" class="subtitle">$5 = 1 entry. Up to 3 entries per payment.</p>
     </header>
+
+    <figure class="prize-showcase">
+      <img class="prize-image" src="public/products_for_winner.png" alt="This raffle's prize" />
+      <figcaption>This is what you could win!</figcaption>
+    </figure>
 
     <form id="entryForm" novalidate>
       <div class="field">
@@ -33,12 +39,8 @@
       </div>
 
       <div class="field">
-        <label>Amount to spend</label>
+        <label>Entries</label>
         <div class="preset-amounts" id="presetAmounts"></div>
-        <div class="custom-amount">
-          <span class="dollar-sign">$</span>
-          <input type="number" id="customAmount" name="amount" min="1" step="1" placeholder="Custom amount" />
-        </div>
         <span class="error" id="amountError"></span>
       </div>
 
