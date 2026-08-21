@@ -22,9 +22,10 @@ const CONFIG = {
   ],
 
   // TEMPORARY, for testing the real ATH Móvil payment flow cheaply (there's
-  // no sandbox environment, so testing costs real money). Remove this whole
-  // property (or set it to null) once testing is done, before going live.
-  testTier: { entries: 1, amount: 0.01 },
+  // no sandbox environment, so testing costs real money). $1 is ATH Móvil's
+  // documented minimum transaction amount. Remove this whole property (or
+  // set it to null) once testing is done, before going live.
+  testTier: { entries: 1, amount: 1 },
 };
 // ---------------------------------------------------------------------------
 
@@ -68,9 +69,79 @@ const ATHM_Checkout = {
   phoneNumber: "",
 };
 
+function initPrizeCarousel() {
+  const track = document.getElementById("prizeCarouselTrack");
+  const dotsEl = document.getElementById("prizeCarouselDots");
+  if (!track || !dotsEl) return;
+
+  const slides = Array.from(track.children);
+  if (slides.length <= 1) return;
+
+  // Force a full decode of every slide's image up front. Without this,
+  // slides positioned off-screen by the flex layout at initial paint can be
+  // decode-deprioritized by the browser and never actually paint once
+  // transformed into view later.
+  slides.forEach((slide) => {
+    const img = slide.querySelector("img");
+    if (img && img.decode) img.decode().catch(() => {});
+  });
+
+  let index = 0;
+  let autoplayTimer = null;
+
+  slides.forEach((_, i) => {
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = "prize-carousel-dot";
+    dot.setAttribute("aria-label", `Show image ${i + 1} of ${slides.length}`);
+    dot.addEventListener("click", () => goTo(i, true));
+    dotsEl.appendChild(dot);
+  });
+  const dots = Array.from(dotsEl.children);
+
+  function render() {
+    track.style.transform = `translateX(-${index * 100}%)`;
+    dots.forEach((dot, i) => dot.classList.toggle("active", i === index));
+  }
+
+  function goTo(i, userTriggered) {
+    index = (i + slides.length) % slides.length;
+    render();
+    if (userTriggered) restartAutoplay();
+  }
+
+  function restartAutoplay() {
+    clearInterval(autoplayTimer);
+    autoplayTimer = setInterval(() => goTo(index + 1), 4000);
+  }
+
+  // Swipe/drag support (mouse + touch, via pointer events).
+  let dragStartX = null;
+  track.addEventListener("pointerdown", (e) => {
+    dragStartX = e.clientX;
+    track.classList.add("dragging");
+  });
+  track.addEventListener("pointerup", (e) => {
+    if (dragStartX === null) return;
+    const delta = e.clientX - dragStartX;
+    dragStartX = null;
+    track.classList.remove("dragging");
+    if (Math.abs(delta) > 40) goTo(index + (delta < 0 ? 1 : -1), true);
+  });
+  track.addEventListener("pointercancel", () => {
+    dragStartX = null;
+    track.classList.remove("dragging");
+  });
+
+  track.style.transition = "transform 0.4s ease";
+  render();
+  restartAutoplay();
+}
+
 function init() {
   document.getElementById("prizeTitle").textContent = CONFIG.prizeTitle;
   document.getElementById("prizeSubtitle").textContent = CONFIG.prizeSubtitle;
+  initPrizeCarousel();
 
   const tiers = CONFIG.testTier ? [CONFIG.testTier, ...CONFIG.entryTiers] : CONFIG.entryTiers;
   tiers.forEach((tier) => {

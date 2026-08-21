@@ -74,11 +74,31 @@ body {
   font-weight: 600;
 }
 
-.prize-gallery {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.prize-carousel {
   margin-bottom: 14px;
+}
+
+.prize-carousel-viewport {
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.prize-carousel-track {
+  display: flex;
+  touch-action: pan-y;
+  cursor: grab;
+  will-change: transform;
+}
+
+.prize-carousel-track.dragging {
+  cursor: grabbing;
+}
+
+.prize-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
 }
 
 .prize-image {
@@ -87,6 +107,8 @@ body {
   max-height: 220px;
   object-fit: contain;
   border-radius: 10px;
+  pointer-events: none;
+  user-select: none;
 }
 
 .prize-image--products {
@@ -96,6 +118,27 @@ body {
 .prize-image--ceremony {
   border: 1px solid var(--border);
   box-shadow: 0 8px 20px rgba(35, 31, 30, 0.15);
+}
+
+.prize-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.prize-carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+}
+
+.prize-carousel-dot.active {
+  background: var(--primary);
 }
 
 .prize-list-title {

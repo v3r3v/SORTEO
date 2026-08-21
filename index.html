@@ -16,17 +16,26 @@
 
     <section class="prize-showcase">
       <p class="prize-caption">This is what you could win!</p>
-      <div class="prize-gallery">
-        <img
-          class="prize-image prize-image--products"
-          src="public/products_for_winner.png"
-          alt="Chronologiste Overnight Youth Hair Serum, Masque Intense Régénérant hair mask, and Bain Régénérant shampoo"
-        />
-        <img
-          class="prize-image prize-image--ceremony"
-          src="public/second_product.png"
-          alt="Chronologiste Service Ceremony ritual set"
-        />
+      <div class="prize-carousel" id="prizeCarousel">
+        <div class="prize-carousel-viewport">
+          <div class="prize-carousel-track" id="prizeCarouselTrack">
+            <div class="prize-slide">
+              <img
+                class="prize-image prize-image--products"
+                src="public/products_for_winner.png"
+                alt="Chronologiste Overnight Youth Hair Serum, Masque Intense Régénérant hair mask, and Bain Régénérant shampoo"
+              />
+            </div>
+            <div class="prize-slide">
+              <img
+                class="prize-image prize-image--ceremony"
+                src="public/second_product.png"
+                alt="Chronologiste Service Ceremony ritual set"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="prize-carousel-dots" id="prizeCarouselDots"></div>
       </div>
       <p class="prize-list-title">Chronologiste Youth Revitalizing Full Routine + Service Ceremony</p>
       <ul class="prize-list">
