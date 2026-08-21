@@ -138,10 +138,105 @@ function initPrizeCarousel() {
   restartAutoplay();
 }
 
+// ---------------------------------------------------------------------------
+// ATH Móvil's widget only tells this page about a payment's outcome if this
+// tab is still alive when the customer confirms in the ATH Móvil app — if
+// they close the tab, or their phone suspends it in the background, that
+// confirmation can be lost even though the payment actually went through
+// (see README "Payment integration" for the full explanation). There's no
+// webhook and no documented way to get the transaction's `ecommerceId`
+// other than by watching the network call the widget itself makes to create
+// it — so that's what this does, the moment the customer taps the ATH
+// button, well before they ever leave for the app. Once we have it, it's
+// sent to Apps Script as a "pending" row that a periodic server-side check
+// (Code.gs reconcilePendingPayments) can use to rescue the entry later even
+// if this tab never reports back.
+//
+// This relies on undocumented internals of athmovil_base.js (specifically,
+// that it uses fetch or XHR to POST to a URL containing
+// "business-transaction/ecommerce/payment"). If ATH Móvil changes how their
+// widget makes that call, this stops capturing new pending rows — it fails
+// silently (the try/catch below) rather than breaking the actual payment
+// flow, but the safety net stops working. Worth spot-checking after any
+// noticeable change on ATH's side.
+// ---------------------------------------------------------------------------
+function watchAthPaymentCreation() {
+  const PAYMENT_PATH = "business-transaction/ecommerce/payment";
+  let capturedForEntryId = null;
+
+  function handleCaptured(ecommerceId) {
+    if (!ecommerceId || !pendingEntry) return;
+    if (capturedForEntryId === pendingEntry.entryId) return; // already recorded this attempt
+    capturedForEntryId = pendingEntry.entryId;
+    recordPendingPayment(pendingEntry, ecommerceId).catch((err) => console.error(err));
+  }
+
+  try {
+    const originalFetch = window.fetch && window.fetch.bind(window);
+    if (originalFetch) {
+      window.fetch = function (...args) {
+        const result = originalFetch(...args);
+        try {
+          const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+          if (url.includes(PAYMENT_PATH)) {
+            result
+              .then((res) => res.clone().json())
+              .then((json) => handleCaptured(json && json.data && json.data.ecommerceId))
+              .catch(() => {});
+          }
+        } catch (err) {
+          console.error(err);
+        }
+        return result;
+      };
+    }
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      this.__isAthPaymentCreate = typeof url === "string" && url.includes(PAYMENT_PATH);
+      return originalOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function (...args) {
+      if (this.__isAthPaymentCreate) {
+        this.addEventListener("load", () => {
+          try {
+            const json = JSON.parse(this.responseText);
+            handleCaptured(json && json.data && json.data.ecommerceId);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
+      return originalSend.apply(this, args);
+    };
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function recordPendingPayment(entry, ecommerceId) {
+  await fetch(CONFIG.appsScriptUrl, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "recordPending",
+      entryId: entry.entryId,
+      name: entry.name,
+      phone: entry.phone,
+      email: entry.email,
+      amount: entry.amount,
+      entries: entry.entries,
+      ecommerceId,
+    }),
+  });
+}
+
 function init() {
   document.getElementById("prizeTitle").textContent = CONFIG.prizeTitle;
   document.getElementById("prizeSubtitle").textContent = CONFIG.prizeSubtitle;
   initPrizeCarousel();
+  watchAthPaymentCreation();
 
   const tiers = CONFIG.testTier ? [CONFIG.testTier, ...CONFIG.entryTiers] : CONFIG.entryTiers;
   tiers.forEach((tier) => {

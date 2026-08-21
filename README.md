@@ -36,15 +36,19 @@ Open [assets/app.js](assets/app.js) and edit the `CONFIG` block at the top:
 ```js
 const CONFIG = {
   prizeTitle: "Win the Prize! 🏆",
-  prizeSubtitle: "$1 = 1 entry. The more entries, the better your odds.",
-  pricePerEntry: 1,
-  presetAmounts: [1, 5, 10, 20, 50],
+  prizeSubtitle: "$5 = 1 entry. Up to 3 entries per payment.",
   appsScriptUrl: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE", // <- paste the URL from step 1.5
   athPublicToken: "YOUR_ATH_BUSINESS_PUBLIC_TOKEN", // <- see "Payment integration" below
+  entryTiers: [
+    { entries: 1, amount: 5 },
+    { entries: 2, amount: 10 },
+    { entries: 3, amount: 15 },
+  ],
+  testTier: { entries: 1, amount: 1 }, // remove once done testing — see "Payment integration" below
 };
 ```
 
-Adjust `prizeTitle`, `presetAmounts`, etc. to match your actual raffle. No other files need to change for basic use.
+Adjust `prizeTitle`, `entryTiers`, etc. to match your actual raffle. No other files need to change for basic use.
 
 ## 3. Host it for free on GitHub Pages
 
@@ -61,9 +65,10 @@ Once you have the live URL from step 3, use any free QR code generator (e.g. sea
 
 ## 5. Collecting entries & picking a winner
 
-- A row is added to the **Entries** tab (Timestamp, EntryID, Name, Phone, Email, AmountUSD, Entries, PaymentStatus, ReferenceNumber) **only after ATH Móvil confirms the payment as `COMPLETED`.** If the customer declines, cancels, has no funds, or the payment window expires, nothing is written and the page shows an error instead.
+- A row is added to the **Entries** tab (Timestamp, EntryID, Name, Phone, Email, AmountUSD, Entries, PaymentStatus, ReferenceNumber) once a payment is confirmed `COMPLETED` — either live, by the customer's own browser tab right after they confirm in the ATH Móvil app, or later, rescued by the reconciliation check described below if that tab never reported back. If the customer declines, cancels, has no funds, or the payment window expires, nothing is written and the page shows an error instead.
 - Every row that does exist is therefore already `PaymentStatus = paid` — there's nothing to mark manually.
 - `ReferenceNumber` is ATH Móvil's own transaction ID, handy for reconciling against your ATH Business transaction history if needed.
+- A separate **PendingPayments** tab tracks every payment attempt from the moment it's created — see "Payment integration" below for what it's for and how to read its `Status` column.
 - When you're ready to draw: open the Google Sheet, click **Raffle > Pick Random Winner** in the menu. It randomly selects a winner weighted by entry count and shows the result in a popup.
 
 ## Payment integration (ATH Móvil)
@@ -79,5 +84,23 @@ Payment is handled by [ATH Móvil's Payment Button widget](https://github.com/ev
 
 Two things to know going in, straight from ATH Móvil's own docs:
 
-- **There is no sandbox/testing environment.** Testing requires a real, active ATH Business account and a separate real ATH Móvil account (different card) to pay from — e.g. do a real $1 test run before going live.
-- **There's no webhook.** Confirmation happens client-side via the callback functions above while the page is open; there's no server-side notification if the customer closes the tab mid-payment (they just won't get an entry, which is the safe failure mode).
+- **There is no sandbox/testing environment.** Testing requires a real, active ATH Business account and a separate real ATH Móvil account (different card) to pay from. `CONFIG.testTier` in `assets/app.js` exists for exactly this — a $1 tier (ATH's documented minimum) so testing doesn't require using a full $5+ entry. **Remove it before going live.**
+- **There's no webhook**, and reaching `COMPLETED` is documented as a two-step, client-driven process: the customer confirms in the ATH Móvil app (→ status `CONFIRM`), and *then* the page still open in their browser automatically calls ATH's `/authorization` service to finalize it. If that tab is closed, or the phone's OS suspends it in the background before that call fires, the confirmation can be lost even though the customer approved the payment. ATH Móvil's app does prompt the customer to return to the site after paying, but nothing forces them to, and their own docs don't guarantee anything resolves this state on their end.
+
+### The pending-payment safety net
+
+Because that failure mode is real (not hypothetical — this is the whole reason it needs a safety net rather than just trusting the callback), the integration doesn't rely on the customer's tab alone:
+
+1. The moment the customer taps the real ATH Móvil button, `assets/app.js` (`watchAthPaymentCreation`) captures the transaction's `ecommerceId` and immediately records a `pending` row in the **PendingPayments** tab — well before the customer ever leaves for the ATH app.
+2. If their tab *does* report back successfully (the common case), the entry is written to **Entries** as normal and the matching PendingPayments row is marked `completed`.
+3. If it doesn't, `Code.gs`'s `reconcilePendingPayments()` periodically asks ATH Móvil's own read-only status-check service (`findPayment`) about every row still marked `pending`:
+   - Actually `COMPLETED` (the payment went through, the tab just never got to report it) → the entry is written to **Entries** and the row is marked `completed`. **This is the rescue.**
+   - `CANCEL` → marked `cancelled`, no entry created.
+   - Still unresolved after 20 minutes → marked `stale`, left alone (see limitation below).
+
+**Setup:** after pasting the updated `Code.gs` into the Apps Script editor and redeploying, open the Google Sheet and click **Raffle > Enable Auto-Reconcile (every 5 min)** once. That installs a time-driven trigger so this runs automatically. (**Raffle > Reconcile Pending Payments Now** runs it immediately if you don't want to wait — handy right after a test payment.) `Code.gs` also has an `ATH_PUBLIC_TOKEN` constant near the top — keep it in sync with `athPublicToken` in `assets/app.js` if you ever change it.
+
+**Limitations, honestly:**
+- This closes the most likely gap (payment actually completed, but the confirmation never made it back), but a transaction that's still stuck at `CONFIRM` — customer approved, but the tab died *before* it could call `/authorization` at all — has no documented server-side rescue from ATH Móvil. It'll show as `stale` in PendingPayments after 20 minutes; check that `EcommerceID` in your ATH Business app if a customer says they paid but a `stale` row is all that shows up.
+- The `ecommerceId` capture works by watching the network call ATH Móvil's own widget script makes — it's not something ATH documents as a stable integration point. If they change how their widget works, this stops capturing new pending rows silently (it won't break the payment flow itself, just the safety net). Worth a quick check after any noticeable change on ATH's side: open the browser console during a test payment and confirm a `pending` row appears in the sheet right after tapping the button.
+- The "already had the ATH Móvil app open" issue some customers hit is inside ATH Móvil's own app/deep-linking behavior — outside anything this website's code touches or can fix.
