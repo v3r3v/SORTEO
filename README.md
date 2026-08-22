@@ -75,17 +75,18 @@ Once you have the live URL from step 3, use any free QR code generator (e.g. sea
 
 Payment is handled by [ATH Móvil's Payment Button widget](https://github.com/evertec/athmovil-javascript-api), embedded directly in [index.html](index.html) / [assets/app.js](assets/app.js). Flow:
 
-1. The customer fills in their details and picks an amount, then clicks **Get My Entries**. This just validates the form — nothing is saved yet.
+1. The customer fills in their details, then clicks **Get My Entries**. This just validates the form — nothing is saved yet.
 2. The page reveals ATH Móvil's own "Pay with ATH Móvil" button. Tapping it creates the transaction and opens ATH's payment modal; the customer confirms in the ATH Móvil app on their phone.
 3. ATH Móvil calls back into the page (`authorizationATHM`, `cancelATHM`, `expiredATHM` in `assets/app.js`) once the customer confirms, cancels, or the payment times out.
 4. Only on a `COMPLETED` result does the page call the Apps Script endpoint to save the entry — with `PaymentStatus = paid` and ATH's `ReferenceNumber` — and show the confirmation screen. Any other outcome shows an error and nothing is saved.
 
 **Setup:** set `CONFIG.athPublicToken` in [assets/app.js](assets/app.js) to your ATH Business account's **Public Token** (Settings tab in the ATH Business app). This token is meant to be public/client-side — that's how ATH Móvil's own widget is designed to be embedded. Never put your ATH Business **private** token anywhere in this repo or the frontend; it isn't needed for this flow at all.
 
-Two things to know going in, straight from ATH Móvil's own docs:
+Three things to know going in, straight from ATH Móvil's own docs (and one discovered by testing):
 
-- **There is no sandbox/testing environment.** Testing requires a real, active ATH Business account and a separate real ATH Móvil account (different card) to pay from. `CONFIG.testTier` in `assets/app.js` exists for exactly this — a $1 tier (ATH's documented minimum) so testing doesn't require using a full $5+ entry. **Remove it before going live.**
+- **There is no sandbox/testing environment.** Testing requires a real, active ATH Business account and a separate real ATH Móvil account (different card) to pay from. `CONFIG.testTier` in `assets/app.js` exists for exactly this — a $1 tier (ATH's documented minimum) so testing doesn't require using a full-price entry. **Remove it before going live.**
 - **There's no webhook**, and reaching `COMPLETED` is documented as a two-step, client-driven process: the customer confirms in the ATH Móvil app (→ status `CONFIRM`), and *then* the page still open in their browser automatically calls ATH's `/authorization` service to finalize it. If that tab is closed, or the phone's OS suspends it in the background before that call fires, the confirmation can be lost even though the customer approved the payment. ATH Móvil's app does prompt the customer to return to the site after paying, but nothing forces them to, and their own docs don't guarantee anything resolves this state on their end.
+- **`ATHM_Checkout` gets frozen (`Object.freeze`) by the widget itself, seconds after page load — not undocumented, just discovered by testing.** Any later mutation (e.g. setting the total when the customer submits the form) silently does nothing; ATH Móvil just charges whatever was in the object at freeze time. **This means the entry price has to be fixed and known before the page finishes loading — there's no way to safely support a customer-chosen amount through this widget as integrated.** `assets/app.js` computes `ATHM_Checkout.total` from `CONFIG.entryTiers[0]` (or `testTier`, if set) right when it's declared, and `init()` refuses to render a multi-choice picker at all if more than one tier is ever enabled, specifically to avoid silently charging the wrong amount. If you need more than one price option, that needs a different technical approach (e.g. a separately pre-configured button per price) — ask before just uncommenting more tiers in `CONFIG.entryTiers`.
 
 ### The pending-payment safety net
 

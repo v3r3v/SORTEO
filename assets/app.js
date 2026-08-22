@@ -35,8 +35,6 @@ const nameInput = document.getElementById("name");
 const phoneInput = document.getElementById("phone");
 const emailInput = document.getElementById("email");
 const presetAmountsEl = document.getElementById("presetAmounts");
-const summaryEl = document.getElementById("summary");
-const summaryText = document.getElementById("summaryText");
 const submitBtn = document.getElementById("submitBtn");
 const statusMsg = document.getElementById("statusMsg");
 const payStepEl = document.getElementById("payStep");
@@ -50,10 +48,29 @@ const entryIdText = document.getElementById("entryIdText");
 let selectedTier = null; // { entries, amount } from CONFIG.entryTiers / CONFIG.testTier
 let pendingEntry = null; // { entryId, name, phone, email, amount, entries } set once the user reaches the pay step
 
-// Config object read by ATH Móvil's athmovil_base.js widget. It renders its
-// own "Pay with ATH Móvil" button into #ATHMovil_Checkout_Button_payment and
-// reads these fields at the moment the customer taps that button, so it's
-// safe to mutate them right before revealing the pay step.
+// Config object read by ATH Móvil's athmovil_base.js widget. IMPORTANT: the
+// widget calls Object.freeze() on this object itself, shortly after page
+// load — well before the customer ever reaches the pay step. Mutating it
+// later (e.g. on form submit, like this used to do) silently does nothing;
+// there's no error, it just sends whatever was here at freeze time. Confirmed
+// directly: Object.isFrozen(ATHM_Checkout) is already true seconds after
+// load, with zero user interaction.
+//
+// That means everything here has to be correct from the very start, which
+// only works because there's currently a single fixed entry price (see the
+// tiers.length guard in init() below). It also means metadata1/metadata2/
+// phoneNumber can't carry real per-transaction info (entryId, customer name,
+// phone) the way they were meant to — they're stuck with whatever static
+// value is set here. Our own entryId/pendingEntry tracking (used for the
+// Apps Script save and the pending-payment reconciliation system) doesn't
+// depend on these fields, so that's unaffected.
+//
+// If more than one entry tier is ever needed again, dynamic per-choice
+// pricing won't work through this widget as integrated — the amount the
+// customer picks in the UI and the amount ATH Móvil actually charges would
+// silently diverge, same bug as this one, just relocated. That'd need a
+// different approach (e.g. a separately pre-configured button per price).
+const athTier = CONFIG.testTier || CONFIG.entryTiers[0];
 const ATHM_Checkout = {
   env: "production",
   publicToken: CONFIG.athPublicToken,
@@ -61,12 +78,21 @@ const ATHM_Checkout = {
   orderType: "",
   theme: "btn",
   lang: "en",
-  total: 1,
-  subtotal: 1,
+  total: athTier.amount,
+  subtotal: athTier.amount,
   tax: 0,
-  metadata1: "",
+  metadata1: CONFIG.prizeTitle.slice(0, 40),
   metadata2: "",
-  items: [],
+  items: [
+    {
+      name: `${athTier.entries} ${athTier.entries === 1 ? "Raffle Entry" : "Raffle Entries"}`,
+      description: CONFIG.prizeTitle,
+      quantity: 1,
+      price: athTier.amount,
+      tax: 0,
+      metadata: "",
+    },
+  ],
   phoneNumber: "",
 };
 
@@ -247,56 +273,30 @@ function init() {
 
   const tiers = CONFIG.testTier ? [CONFIG.testTier, ...CONFIG.entryTiers] : CONFIG.entryTiers;
 
+  // ATH_Checkout's amount is fixed at freeze time (see the big comment above
+  // its declaration) — it's hardcoded to `athTier`. If more than one tier is
+  // active, whichever one the customer picks here would NOT necessarily
+  // match what ATH Móvil actually charges. Rather than risk silently
+  // charging the wrong amount, refuse to render a picker at all until this
+  // is fixed in code.
+  if (tiers.length > 1) {
+    presetAmountsEl.innerHTML = "";
+    setFieldError(
+      "amountError",
+      "Setup error: more than one entry tier is enabled, but this widget only supports a single fixed price safely (see the ATHM_Checkout comment in assets/app.js). Reduce to one tier before going live."
+    );
+    return;
+  }
+
   // A single tier isn't really a "choice" — showing it as one lonely button
   // next to Get My Entries is redundant. Auto-select it and show the price
-  // as plain text instead. Falls back to the picker automatically as soon
-  // as more than one tier is enabled again.
-  if (tiers.length === 1) {
-    const tier = tiers[0];
-    selectedTier = tier;
-    presetAmountsEl.classList.add("single-tier");
-    presetAmountsEl.innerHTML = `<span class="single-tier-price">$${tier.amount}</span><span class="single-tier-note">${
-      tier.entries
-    } ${tier.entries === 1 ? "raffle entry" : "raffle entries"}</span>`;
-    return;
-  }
-
-  tiers.forEach((tier) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "amount-btn";
-    if (tier === CONFIG.testTier) btn.classList.add("amount-btn--test");
-    btn.innerHTML = `$${tier.amount}<small>${tier.entries} ${tier.entries === 1 ? "entry" : "entries"}${
-      tier === CONFIG.testTier ? " · test" : ""
-    }</small>`;
-    btn.addEventListener("click", () => selectTier(tier, btn));
-    presetAmountsEl.appendChild(btn);
-  });
-}
-
-function selectTier(tier, btnEl) {
-  clearPresetSelection();
-  btnEl.classList.add("selected");
+  // as plain text instead.
+  const tier = tiers[0];
   selectedTier = tier;
-  updateSummary();
-}
-
-function clearPresetSelection() {
-  presetAmountsEl.querySelectorAll(".amount-btn").forEach((b) => b.classList.remove("selected"));
-}
-
-function updateSummary() {
-  const amountError = document.getElementById("amountError");
-  amountError.textContent = "";
-
-  if (!selectedTier) {
-    summaryEl.hidden = true;
-    return;
-  }
-  summaryText.textContent = `$${selectedTier.amount} = ${selectedTier.entries} ${
-    selectedTier.entries === 1 ? "entry" : "entries"
-  }`;
-  summaryEl.hidden = false;
+  presetAmountsEl.classList.add("single-tier");
+  presetAmountsEl.innerHTML = `<span class="single-tier-price">$${tier.amount}</span><span class="single-tier-note">${
+    tier.entries
+  } ${tier.entries === 1 ? "raffle entry" : "raffle entries"}</span>`;
 }
 
 function setFieldError(id, message) {
@@ -395,26 +395,10 @@ function goToPayStep() {
     entries,
   };
 
-  // ATH Móvil's example config uses a plain 10-digit local number (no
-  // formatting, no country code) to pre-fill the phone screen in their modal.
-  const athPhoneDigits = pendingEntry.phone.replace(/\D/g, "").slice(-10);
-
-  ATHM_Checkout.total = amount;
-  ATHM_Checkout.subtotal = amount;
-  ATHM_Checkout.tax = 0;
-  ATHM_Checkout.metadata1 = pendingEntry.entryId;
-  ATHM_Checkout.metadata2 = pendingEntry.name.slice(0, 40);
-  ATHM_Checkout.phoneNumber = athPhoneDigits;
-  ATHM_Checkout.items = [
-    {
-      name: `${entries} ${entries === 1 ? "Raffle Entry" : "Raffle Entries"}`,
-      description: CONFIG.prizeTitle,
-      quantity: 1,
-      price: amount,
-      tax: 0,
-      metadata: pendingEntry.entryId,
-    },
-  ];
+  // NOTE: ATHM_Checkout is already frozen by ATH Móvil's widget by this
+  // point (see the comment on its declaration above) — total/items/etc. are
+  // fixed at page load and can't be updated per-submission anymore. This
+  // step only prepares our own bookkeeping and the display text.
 
   paySummaryText.textContent = `$${amount} = ${entries} ${entries === 1 ? "entry" : "entries"}`;
   setPayStatus("", null);
