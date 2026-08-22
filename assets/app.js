@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 const CONFIG = {
   prizeTitle: "Win the Prize! 🏆",
-  prizeSubtitle: "$5 = 1 entry. Up to 3 entries per payment.",
+  prizeSubtitle: "$7 = 1 entry.",
 
   // Paste the "Web app" URL you get after deploying apps-script/Code.gs
   // (Deploy > New deployment > Web app > Execute as: Me > Who has access: Anyone).
@@ -14,11 +14,12 @@ const CONFIG = {
   // Button widget requires it to be embedded in the page like this.
   athPublicToken: "680b201c4ca668db83c06825b7e7e44cc75ae421",
 
-  // Fixed entry options — $5 per entry, capped at 3 entries per payment.
+  // Fixed entry options. Only $7 = 1 entry is enabled for now; the other
+  // tiers are kept here, commented out, to re-enable later.
   entryTiers: [
-    { entries: 1, amount: 5 },
-    { entries: 2, amount: 10 },
-    { entries: 3, amount: 15 },
+    { entries: 1, amount: 7 },
+    // { entries: 2, amount: 10 },
+    // { entries: 3, amount: 15 },
   ],
 
   // TEMPORARY, for testing the real ATH Móvil payment flow cheaply (there's
