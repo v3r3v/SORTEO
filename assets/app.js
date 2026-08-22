@@ -22,11 +22,11 @@ const CONFIG = {
     // { entries: 3, amount: 15 },
   ],
 
-  // TEMPORARY, for testing the real ATH Móvil payment flow cheaply (there's
-  // no sandbox environment, so testing costs real money). $1 is ATH Móvil's
-  // documented minimum transaction amount. Remove this whole property (or
-  // set it to null) once testing is done, before going live.
-  testTier: { entries: 1, amount: 1 },
+  // Set to { entries: 1, amount: 1 } to temporarily re-enable a cheap $1
+  // test tier for testing the real ATH Móvil payment flow (there's no
+  // sandbox environment, so testing costs real money). Disabled (null) for
+  // production.
+  testTier: null,
 };
 // ---------------------------------------------------------------------------
 
