@@ -231,6 +231,29 @@ input:focus {
   margin-bottom: 10px;
 }
 
+.preset-amounts.single-tier {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f6f1ea;
+  border: 1px solid #e4d8c6;
+}
+
+.single-tier-price {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.single-tier-note {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .amount-btn {
   padding: 12px 0;
   border: 1.5px solid var(--border);

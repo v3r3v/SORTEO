@@ -116,10 +116,16 @@ function initPrizeCarousel() {
     autoplayTimer = setInterval(() => goTo(index + 1), 4000);
   }
 
-  // Swipe/drag support (mouse + touch, via pointer events).
+  // Swipe/drag support (mouse + touch, via pointer events). Pointer capture
+  // is the important part: without it, pointerup fires on whatever element
+  // ends up under the finger at release — if a swipe drifts past the card's
+  // edge (easy to do on a narrow phone screen), that's outside the track
+  // entirely and this listener never sees it, silently breaking swipes in
+  // whichever direction happens to drift off the card more often.
   let dragStartX = null;
   track.addEventListener("pointerdown", (e) => {
     dragStartX = e.clientX;
+    track.setPointerCapture(e.pointerId);
     track.classList.add("dragging");
   });
   track.addEventListener("pointerup", (e) => {
@@ -240,6 +246,21 @@ function init() {
   watchAthPaymentCreation();
 
   const tiers = CONFIG.testTier ? [CONFIG.testTier, ...CONFIG.entryTiers] : CONFIG.entryTiers;
+
+  // A single tier isn't really a "choice" — showing it as one lonely button
+  // next to Get My Entries is redundant. Auto-select it and show the price
+  // as plain text instead. Falls back to the picker automatically as soon
+  // as more than one tier is enabled again.
+  if (tiers.length === 1) {
+    const tier = tiers[0];
+    selectedTier = tier;
+    presetAmountsEl.classList.add("single-tier");
+    presetAmountsEl.innerHTML = `<span class="single-tier-price">$${tier.amount}</span><span class="single-tier-note">${
+      tier.entries
+    } ${tier.entries === 1 ? "raffle entry" : "raffle entries"}</span>`;
+    return;
+  }
+
   tiers.forEach((tier) => {
     const btn = document.createElement("button");
     btn.type = "button";
